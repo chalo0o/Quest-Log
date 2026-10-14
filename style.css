@@ -790,3 +790,106 @@ h2 {
     transition-duration: 0.01ms !important;
   }
 }
+
+[hidden] {
+  display: none !important;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.header-actions .header-note {
+  margin: 0 8px 0 0;
+}
+
+.sync-status,
+.user-info {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.user-info {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.auth-button:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.login-button {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.login-prompt {
+  margin-top: 18px;
+  padding: 12px 15px;
+  border: 2px dashed var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sync-status.is-error {
+  color: var(--pink);
+}
+
+@media (max-width: 760px) {
+  .site-header {
+    gap: 12px;
+  }
+
+  .header-actions .header-note {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .site-header {
+    min-height: 82px;
+  }
+
+  .header-actions {
+    gap: 5px;
+  }
+
+  .sync-status {
+    flex-basis: 100%;
+    text-align: right;
+  }
+
+  .user-info {
+    max-width: 105px;
+    font-size: 10px;
+  }
+
+  .auth-button {
+    min-height: 30px;
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+}

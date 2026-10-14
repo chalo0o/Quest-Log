@@ -9,7 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="script.js" defer></script>
+    <script type="module" src="script.js"></script>
   </head>
   <body>
     <main class="app-shell">
@@ -18,8 +18,18 @@
           <span class="brand-mark" aria-hidden="true">✦</span>
           <span>QUEST LOG</span>
         </a>
-        <p class="header-note">PETUALANGAN DIMULAI DI SINI</p>
+        <div class="header-actions">
+          <p class="header-note">PETUALANGAN DIMULAI DI SINI</p>
+          <span class="sync-status" id="sync-status" aria-live="polite">Belum masuk</span>
+          <span class="user-info" id="user-info" hidden></span>
+          <button class="auth-button login-button" id="login-button" type="button">Masuk dengan Google</button>
+          <button class="auth-button logout-button" id="logout-button" type="button" hidden>Keluar</button>
+        </div>
       </header>
+
+      <div class="login-prompt" id="login-prompt">
+        Masuk dengan Google untuk menyimpan dan menyinkronkan quest di semua perangkat.
+      </div>
 
       <section class="character-panel pixel-panel" aria-labelledby="character-title">
         <div class="character-identity">
@@ -84,7 +94,7 @@
           <span class="quest-count" id="quest-count">0 QUEST</span>
         </div>
 
-        <form class="quest-form pixel-panel" id="quest-form">
+        <form class="quest-form pixel-panel" id="quest-form" hidden>
           <label class="field quest-name-field">
             <span>NAMA QUEST</span>
             <input

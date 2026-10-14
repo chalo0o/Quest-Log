@@ -1,6 +1,34 @@
-(() => {
-  "use strict";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  onSnapshot,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
+const firebaseConfig = {
+  apiKey: "AIzaSyC_Y51uP5wDkl_dwraVS_7E4Uootcao0_4",
+  authDomain: "quest-logg.firebaseapp.com",
+  projectId: "quest-logg",
+  storageBucket: "quest-logg.firebasestorage.app",
+  messagingSenderId: "730905928054",
+  appId: "1:730905928054:web:8c826c2ead4837a71a9a57",
+  measurementId: "G-M84659HZXR",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+(() => {
   const STORAGE_KEY = "questlog-v1";
   const DIFFICULTIES = {
     easy: { label: "Mudah", xp: 10 },
@@ -42,12 +70,25 @@
     questList: document.querySelector("#quest-list"),
     toastRegion: document.querySelector("#toast-region"),
     filterTabs: document.querySelectorAll(".filter-tab"),
+    loginButton: document.querySelector("#login-button"),
+    logoutButton: document.querySelector("#logout-button"),
+    userInfo: document.querySelector("#user-info"),
+    syncStatus: document.querySelector("#sync-status"),
+    loginPrompt: document.querySelector("#login-prompt"),
   };
 
   let activeFilter = "active";
   let toastQueue = [];
   let toastShowing = false;
   let state = loadState();
+  let currentUser = null;
+  let stopSnapshot = null;
+  let cloudReady = false;
+  let cloudLoadFailed = false;
+  let pendingSave = null;
+  let cloudWriteChain = Promise.resolve();
+  let lastSnapshotJson = "";
+  let applyingRemoteSnapshot = false;
 
   function createDefaultState() {
     return {
@@ -56,6 +97,7 @@
       currentStreak: 0,
       bestStreak: 0,
       lastCompletedDate: null,
+      nid: 1,
     };
   }
 
@@ -63,29 +105,30 @@
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return createDefaultState();
-
-      const parsed = JSON.parse(saved);
-      if (
-        !parsed ||
-        !Array.isArray(parsed.quests) ||
-        !Number.isFinite(parsed.totalXp) ||
-        !Number.isFinite(parsed.currentStreak) ||
-        !Number.isFinite(parsed.bestStreak)
-      ) {
-        throw new Error("Data penyimpanan Quest Log tidak valid.");
-      }
-      return {
-        quests: parsed.quests.filter(isValidQuest),
-        totalXp: Math.max(0, parsed.totalXp),
-        currentStreak: Math.max(0, parsed.currentStreak),
-        bestStreak: Math.max(0, parsed.bestStreak),
-        lastCompletedDate: typeof parsed.lastCompletedDate === "string" ? parsed.lastCompletedDate : null,
-      };
+      return normalizeState(JSON.parse(saved));
     } catch (error) {
       queueToast("Data tersimpan tidak dapat dibaca", true);
       console.error("Gagal membaca data Quest Log:", error);
       return createDefaultState();
     }
+  }
+
+  function normalizeState(data) {
+    if (!data || !Array.isArray(data.quests)) {
+      throw new Error("Data penyimpanan Quest Log tidak valid.");
+    }
+    const totalXp = Number.isFinite(data.totalXp) ? data.totalXp : Number.isFinite(data.xp) ? data.xp : 0;
+    const quests = data.quests.filter(isValidQuest);
+    return {
+      quests,
+      totalXp: Math.max(0, totalXp),
+      currentStreak: Math.max(0, Number.isFinite(data.currentStreak) ? data.currentStreak : Number.isFinite(data.streak) ? data.streak : 0),
+      bestStreak: Math.max(0, Number.isFinite(data.bestStreak) ? data.bestStreak : Number.isFinite(data.best) ? data.best : 0),
+      lastCompletedDate: typeof data.lastCompletedDate === "string"
+        ? data.lastCompletedDate
+        : typeof data.last === "string" ? data.last : null,
+      nid: Math.max(1, Number.isSafeInteger(data.nid) ? data.nid : 1),
+    };
   }
 
   function isValidQuest(quest) {
@@ -98,15 +141,48 @@
     );
   }
 
-  function saveState() {
+  function serializeState(sourceState = state) {
+    const completed = sourceState.quests.filter((quest) => quest.completed);
+    return {
+      quests: sourceState.quests,
+      xp: sourceState.totalXp,
+      level: getLevelInfo(sourceState.totalXp).level,
+      done: completed.length,
+      hard: completed.filter((quest) => quest.difficulty === "hard").length,
+      streak: sourceState.currentStreak,
+      best: sourceState.bestStreak,
+      last: sourceState.lastCompletedDate,
+      nid: sourceState.nid,
+    };
+  }
+
+  function saveLocalState(uid = currentUser?.uid) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(serializeState()));
+      if (uid) localStorage.setItem(`${STORAGE_KEY}-owner`, uid);
       return true;
     } catch (error) {
       queueToast("Data gagal disimpan. Periksa ruang penyimpanan browser.", true);
       console.error("Gagal menyimpan data Quest Log:", error);
       return false;
     }
+  }
+
+  function loadLocalOwner() {
+    try {
+      return localStorage.getItem(`${STORAGE_KEY}-owner`);
+    } catch (error) {
+      console.error("Gagal membaca pemilik cadangan lokal Quest Log:", error);
+      return null;
+    }
+  }
+
+  function hasLocalProgress(sourceState) {
+    return sourceState.quests.length > 0 ||
+      sourceState.totalXp > 0 ||
+      sourceState.currentStreak > 0 ||
+      sourceState.bestStreak > 0 ||
+      sourceState.lastCompletedDate !== null;
   }
 
   function escapeHtml(value) {
@@ -308,6 +384,214 @@
     }, 2300);
   }
 
+  function setSyncStatus(message, isError = false) {
+    elements.syncStatus.textContent = message;
+    elements.syncStatus.classList.toggle("is-error", isError);
+  }
+
+  function updateAuthUi() {
+    const signedIn = Boolean(currentUser);
+    elements.loginButton.hidden = signedIn;
+    elements.logoutButton.hidden = !signedIn;
+    elements.userInfo.hidden = !signedIn;
+    elements.userInfo.textContent = currentUser
+      ? [currentUser.displayName, currentUser.email].filter(Boolean).join(" · ")
+      : "";
+    elements.loginPrompt.hidden = signedIn;
+    elements.form.hidden = !signedIn || !cloudReady;
+  }
+
+  function describeFirebaseError(error) {
+    if (error?.code === "permission-denied" || error?.code === "firestore/permission-denied") {
+      return "Akses Firestore ditolak. Periksa aturan keamanan Firebase.";
+    }
+    if (error?.code === "auth/popup-closed-by-user") return "Jendela login ditutup sebelum selesai.";
+    if (error?.code === "auth/popup-blocked") return "Popup login diblokir browser. Izinkan popup lalu coba lagi.";
+    return error?.message || "Terjadi kesalahan yang tidak diketahui.";
+  }
+
+  function applyRemoteState(data, uid) {
+    // Snapshot hanya memperbarui tampilan dan cadangan lokal; tidak pernah menjadwalkan setDoc.
+    applyingRemoteSnapshot = true;
+    try {
+      state = normalizeState(data);
+      saveLocalState(uid);
+      render();
+      lastSnapshotJson = JSON.stringify(serializeState());
+      setSyncStatus("Tersimpan ✓");
+    } finally {
+      applyingRemoteSnapshot = false;
+    }
+  }
+
+  function listenToUserDocument(user, userDocument) {
+    stopSnapshot = onSnapshot(
+      userDocument,
+      (snapshot) => {
+        if (auth.currentUser?.uid !== user.uid) return;
+        if (!snapshot.exists()) {
+          cloudReady = true;
+          updateAuthUi();
+          setSyncStatus(cloudLoadFailed ? "Offline / gagal memuat" : "Tersimpan ✓", cloudLoadFailed);
+          return;
+        }
+
+        try {
+          cloudLoadFailed = false;
+          const nextState = normalizeState(snapshot.data());
+          const nextJson = JSON.stringify(serializeState(nextState));
+          if (nextJson !== lastSnapshotJson) applyRemoteState(snapshot.data(), user.uid);
+          else setSyncStatus("Tersimpan ✓");
+          cloudReady = true;
+          updateAuthUi();
+        } catch (error) {
+          console.error("Data Firestore Quest Log tidak valid:", error);
+          setSyncStatus("Data cloud tidak valid", true);
+          queueToast("Data Quest Log dari cloud tidak valid.", true);
+        }
+      },
+      (error) => {
+        cloudLoadFailed = true;
+        console.error("Gagal menerima pembaruan Firestore Quest Log:", error);
+        setSyncStatus("Gagal menyinkronkan", true);
+        queueToast(`Sinkronisasi gagal: ${describeFirebaseError(error)}`, true);
+      },
+    );
+  }
+
+  async function writeCloudState(uid, snapshot = serializeState()) {
+    setSyncStatus("Menyimpan...");
+    const userDocument = doc(db, "users", uid);
+    cloudWriteChain = cloudWriteChain
+      .catch(() => {})
+      .then(() => setDoc(userDocument, snapshot));
+    try {
+      await cloudWriteChain;
+      if (currentUser?.uid === uid) {
+        cloudLoadFailed = false;
+        lastSnapshotJson = JSON.stringify(snapshot);
+        setSyncStatus("Tersimpan ✓");
+      }
+    } catch (error) {
+      console.error("Gagal menyimpan Quest Log ke Firestore:", error);
+      if (currentUser?.uid === uid) setSyncStatus("Gagal menyimpan", true);
+      queueToast(`Gagal menyimpan ke cloud: ${describeFirebaseError(error)}`, true);
+    }
+  }
+
+  function scheduleCloudSave() {
+    if (!currentUser || !cloudReady || applyingRemoteSnapshot) return;
+    setSyncStatus("Menyimpan...");
+    window.clearTimeout(pendingSave);
+    const uid = currentUser.uid;
+    pendingSave = window.setTimeout(() => {
+      pendingSave = null;
+      if (currentUser?.uid === uid && cloudReady) {
+        void writeCloudState(uid, serializeState());
+      }
+    }, 500);
+  }
+
+  function persistState() {
+    saveLocalState();
+    scheduleCloudSave();
+  }
+
+  async function handleAuthState(user) {
+    if (stopSnapshot) {
+      stopSnapshot();
+      stopSnapshot = null;
+    }
+    window.clearTimeout(pendingSave);
+    pendingSave = null;
+    cloudReady = false;
+    cloudLoadFailed = false;
+    currentUser = user;
+    updateAuthUi();
+
+    if (!user) {
+      setSyncStatus("Belum masuk");
+      return;
+    }
+
+    setSyncStatus("Memuat data...");
+    const savedLocalState = state;
+    const localOwner = loadLocalOwner();
+    const localBelongsToUser = !localOwner || localOwner === user.uid;
+    const initialState = localBelongsToUser ? savedLocalState : createDefaultState();
+    state = initialState;
+    render();
+    const userDocument = doc(db, "users", user.uid);
+
+    try {
+      const snapshot = await getDoc(userDocument);
+      if (auth.currentUser?.uid !== user.uid) return;
+
+      if (snapshot.exists()) {
+        state = normalizeState(snapshot.data());
+      } else {
+        state = initialState;
+        // Dokumen baru dimulai dari cadangan lokal bila ada, agar migrasi tidak menghapus quest lama.
+        await setDoc(userDocument, serializeState());
+        if (auth.currentUser?.uid !== user.uid) return;
+      }
+
+      saveLocalState(user.uid);
+      lastSnapshotJson = JSON.stringify(serializeState());
+      listenToUserDocument(user, userDocument);
+      cloudReady = true;
+      updateAuthUi();
+      render();
+      setSyncStatus("Tersimpan ✓");
+    } catch (error) {
+      if (auth.currentUser?.uid !== user.uid) return;
+      cloudLoadFailed = true;
+      console.error("Gagal memuat Quest Log dari Firestore:", error);
+      state = initialState;
+      saveLocalState(user.uid);
+      listenToUserDocument(user, userDocument);
+      cloudReady = true;
+      updateAuthUi();
+      render();
+      setSyncStatus("Offline / gagal memuat", true);
+      queueToast(`Data cloud gagal dimuat: ${describeFirebaseError(error)}. Cadangan lokal tetap tersedia.`, true);
+    }
+  }
+
+  elements.loginButton.addEventListener("click", async () => {
+    elements.loginButton.disabled = true;
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+    } catch (error) {
+      console.error("Login Google Quest Log gagal:", error);
+      queueToast(`Login gagal: ${describeFirebaseError(error)}`, true);
+    } finally {
+      elements.loginButton.disabled = false;
+    }
+  });
+
+  elements.logoutButton.addEventListener("click", async () => {
+    if (pendingSave && currentUser && cloudReady) {
+      window.clearTimeout(pendingSave);
+      pendingSave = null;
+      await writeCloudState(currentUser.uid, serializeState());
+    }
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout Quest Log gagal:", error);
+      queueToast(`Tidak dapat keluar: ${describeFirebaseError(error)}`, true);
+    }
+  });
+
+  onAuthStateChanged(auth, (user) => {
+    void handleAuthState(user).catch((error) => {
+      console.error("Gagal memproses status autentikasi Quest Log:", error);
+      setSyncStatus("Gagal memuat akun", true);
+      queueToast(`Autentikasi gagal: ${describeFirebaseError(error)}`, true);
+    });
+  });
+
   elements.form.addEventListener("submit", (event) => {
     event.preventDefault();
     const name = elements.name.value.trim();
@@ -318,7 +602,7 @@
     }
 
     state.quests.push({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: String(state.nid++),
       name: name.slice(0, 100),
       difficulty: elements.difficulty.value,
       deadline: elements.deadline.value || null,
@@ -326,7 +610,7 @@
       createdAt: Date.now(),
       completedAt: null,
     });
-    saveState();
+    persistState();
     elements.form.reset();
     elements.difficulty.value = "medium";
     render();
@@ -353,7 +637,7 @@
 
     if (button.dataset.action === "delete") {
       state.quests = state.quests.filter((item) => item.id !== quest.id);
-      saveState();
+      persistState();
       render();
       return;
     }
@@ -376,11 +660,10 @@
     }
 
     const newLevel = getLevelInfo(state.totalXp).level;
-    saveState();
+    persistState();
     render();
     queueToast(`+${xpEarned} XP`);
     if (newLevel > previousLevel) queueToast("LEVEL UP!");
   });
-
   render();
 })();
