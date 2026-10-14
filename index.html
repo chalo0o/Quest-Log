@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#14122b">
+    <title>Quest Log — Petualangan Dimulai</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="site-header">
+        <a class="brand" href="#" aria-label="Quest Log, beranda">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>QUEST LOG</span>
+        </a>
+        <p class="header-note">PETUALANGAN DIMULAI DI SINI</p>
+      </header>
+
+      <section class="character-panel pixel-panel" aria-labelledby="character-title">
+        <div class="character-identity">
+          <div class="avatar" id="character-avatar" aria-hidden="true">🧙</div>
+          <div>
+            <p class="eyebrow">KARAKTER</p>
+            <h1 id="character-title">Murid Baru</h1>
+          </div>
+        </div>
+
+        <div class="xp-section">
+          <div class="level-row">
+            <span class="level-label">LEVEL</span>
+            <strong class="level-number" id="character-level">1</strong>
+            <span class="xp-number" id="xp-text">0 / 100 XP</span>
+          </div>
+          <div
+            class="xp-track"
+            id="xp-progress"
+            role="progressbar"
+            aria-label="Kemajuan XP menuju level berikutnya"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-valuetext="0 dari 100 XP"
+          >
+            <div class="xp-fill" id="xp-fill"></div>
+          </div>
+        </div>
+
+        <div class="character-stats">
+          <div class="stat-card">
+            <span class="stat-icon" aria-hidden="true">🔥</span>
+            <span class="stat-value" id="streak-value">0</span>
+            <span class="stat-label">STREAK HARI</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon" aria-hidden="true">✓</span>
+            <span class="stat-value" id="completed-value">0</span>
+            <span class="stat-label">QUEST SELESAI</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="badges-section" aria-labelledby="badges-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">PENCAPAIAN</p>
+            <h2 id="badges-title">Lencana</h2>
+          </div>
+          <span class="section-aside">KOLEKSI PETUALANG</span>
+        </div>
+        <div class="badge-list" id="badge-list"></div>
+      </section>
+
+      <section class="quest-section" aria-labelledby="quests-title">
+        <div class="section-heading quest-heading">
+          <div>
+            <p class="eyebrow">PAPAN MISI</p>
+            <h2 id="quests-title">Quest kamu</h2>
+          </div>
+          <span class="quest-count" id="quest-count">0 QUEST</span>
+        </div>
+
+        <form class="quest-form pixel-panel" id="quest-form">
+          <label class="field quest-name-field">
+            <span>NAMA QUEST</span>
+            <input
+              id="quest-name"
+              name="name"
+              type="text"
+              maxlength="100"
+              placeholder="Contoh: Baca 10 halaman buku"
+              autocomplete="off"
+            >
+          </label>
+          <label class="field difficulty-field">
+            <span>KESULITAN</span>
+            <select id="quest-difficulty" name="difficulty">
+              <option value="easy">Mudah · 10 XP</option>
+              <option value="medium" selected>Sedang · 25 XP</option>
+              <option value="hard">Sulit · 50 XP</option>
+            </select>
+          </label>
+          <label class="field deadline-field">
+            <span>DEADLINE <small>(OPSIONAL)</small></span>
+            <input id="quest-deadline" name="deadline" type="date">
+          </label>
+          <button class="add-button" type="submit">TAMBAH QUEST <span aria-hidden="true">＋</span></button>
+        </form>
+
+        <div class="quest-toolbar">
+          <div class="filter-tabs" role="tablist" aria-label="Filter daftar quest">
+            <button class="filter-tab is-active" type="button" role="tab" aria-selected="true" data-filter="active">Aktif</button>
+            <button class="filter-tab" type="button" role="tab" aria-selected="false" data-filter="completed">Selesai</button>
+            <button class="filter-tab" type="button" role="tab" aria-selected="false" data-filter="all">Semua</button>
+          </div>
+          <span class="sort-note">◈ AKTIF DIURUTKAN BERDASARKAN DEADLINE</span>
+        </div>
+
+        <div class="quest-list" id="quest-list" aria-live="polite"></div>
+      </section>
+
+      <footer class="site-footer">
+        <span>QUEST LOG <span aria-hidden="true">✦</span> SATU QUEST DALAM SATU WAKTU</span>
+      </footer>
+    </main>
+
+    <div class="toast-region" id="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>
