@@ -134,6 +134,14 @@
               <option value="hard">Sulit · 50 XP</option>
             </select>
           </label>
+          <label class="field category-field">
+            <span>KATEGORI</span>
+            <select id="quest-category" name="category">
+              <option value="kuliah">Kuliah</option>
+              <option value="kerja">Kerja</option>
+              <option value="pribadi" selected>Pribadi</option>
+            </select>
+          </label>
           <label class="field deadline-field">
             <span>DEADLINE <small>(OPSIONAL)</small></span>
             <input id="quest-deadline" name="deadline" type="date">
@@ -150,7 +158,30 @@
           <span class="sort-note">◈ AKTIF DIURUTKAN BERDASARKAN DEADLINE</span>
         </div>
 
+        <div class="category-filters" role="group" aria-label="Filter kategori quest">
+          <button class="category-filter is-active" type="button" aria-label="Filter semua kategori" aria-pressed="true" data-category-filter="all">Semua</button>
+          <button class="category-filter" type="button" aria-label="Filter kategori Kuliah" aria-pressed="false" data-category-filter="kuliah">Kuliah</button>
+          <button class="category-filter" type="button" aria-label="Filter kategori Kerja" aria-pressed="false" data-category-filter="kerja">Kerja</button>
+          <button class="category-filter" type="button" aria-label="Filter kategori Pribadi" aria-pressed="false" data-category-filter="pribadi">Pribadi</button>
+        </div>
         <div class="quest-list" id="quest-list" aria-live="polite"></div>
+      </section>
+
+      <section class="statistics-section" aria-labelledby="statistics-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">CATATAN PETUALANGAN</p>
+            <h2 id="statistics-title">Statistik minggu ini</h2>
+          </div>
+        </div>
+        <div class="weekly-summary" id="weekly-summary"></div>
+        <div class="chart-toolbar">
+          <div class="chart-toggles" role="group" aria-label="Jenis statistik grafik">
+            <button class="chart-toggle is-active" type="button" aria-label="Tampilkan grafik quest selesai" aria-pressed="true" data-chart-mode="done">Quest selesai</button>
+            <button class="chart-toggle" type="button" aria-label="Tampilkan grafik XP" aria-pressed="false" data-chart-mode="xp">XP</button>
+          </div>
+        </div>
+        <div class="weekly-chart" id="weekly-chart"></div>
       </section>
 
       <footer class="site-footer">
@@ -159,5 +190,28 @@
     </main>
 
     <div class="toast-region" id="toast-region" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog class="confirm-dialog" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+      <form method="dialog" class="confirm-card">
+        <h2 class="confirm-title" id="confirm-title">Konfirmasi</h2>
+        <p class="confirm-message" id="confirm-message"></p>
+        <div class="confirm-actions">
+          <button class="confirm-cancel" id="confirm-cancel" type="button" aria-label="Batalkan">Batal</button>
+          <button class="confirm-accept" id="confirm-accept" type="button">Hapus</button>
+        </div>
+      </form>
+    </dialog>
+
+    <section class="timer-panel" id="timer-panel" aria-label="Timer Pomodoro" aria-live="off" hidden>
+      <div class="timer-info">
+        <strong class="timer-quest" id="timer-quest"></strong>
+        <span class="timer-phase" id="timer-phase"></span>
+      </div>
+      <strong class="timer-countdown" id="timer-countdown">25:00</strong>
+      <div class="timer-actions">
+        <button class="timer-control" id="timer-pause" type="button" aria-label="Jeda timer">Jeda</button>
+        <button class="timer-control timer-stop" id="timer-stop" type="button" aria-label="Berhenti timer">Berhenti</button>
+      </div>
+    </section>
   </body>
 </html>

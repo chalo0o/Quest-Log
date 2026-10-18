@@ -9,6 +9,9 @@
   --gold: #f2b84b;
   --mint: #5fd3a1;
   --pink: #ff6b81;
+  --blue: #5aa9ff;
+  --orange: #ff9f5a;
+  --purple: #b58cff;
   --font-title: "Press Start 2P", "Courier New", monospace;
   --font-body: "Nunito", "Trebuchet MS", sans-serif;
   font-family: var(--font-body);
@@ -28,6 +31,9 @@
     --gold: #bd7800;
     --mint: #168657;
     --pink: #d73352;
+    --blue: #1760a8;
+    --orange: #a94700;
+    --purple: #6635a6;
   }
 }
 
@@ -348,7 +354,7 @@ h2 {
 
 .quest-form {
   display: grid;
-  grid-template-columns: minmax(180px, 1.7fr) minmax(155px, 1fr) minmax(145px, 0.9fr) auto;
+  grid-template-columns: minmax(180px, 1.7fr) minmax(145px, 1fr) minmax(125px, 0.85fr) minmax(145px, 0.9fr) auto;
   gap: 12px;
   align-items: end;
   padding: 17px;
@@ -418,6 +424,31 @@ h2 {
   justify-content: space-between;
   gap: 12px;
   margin: 24px 0 13px;
+}
+
+.category-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0 0 13px;
+}
+
+.category-filter,
+.chart-toggle {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.category-filter.is-active,
+.chart-toggle.is-active {
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 .filter-tabs {
@@ -537,12 +568,49 @@ h2 {
   font-weight: 700;
 }
 
+.pomodoro-button {
+  min-width: 25px;
+  min-height: 23px;
+  padding: 0 4px;
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+  background: var(--panel-raised);
+  color: var(--gold);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.pomodoro-button:hover {
+  filter: brightness(1.15);
+}
+
 .difficulty-tag,
 .deadline-tag,
-.overdue-tag {
+.overdue-tag,
+.category-tag,
+.pomodoro-count {
   padding: 2px 6px;
   border: 1px solid var(--line);
   border-radius: 2px;
+}
+
+.category-tag.kuliah {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.category-tag.kerja {
+  border-color: var(--orange);
+  color: var(--orange);
+}
+
+.category-tag.pribadi {
+  border-color: var(--purple);
+  color: var(--purple);
+}
+
+.pomodoro-count {
+  color: var(--gold);
 }
 
 .difficulty-tag.easy {
@@ -605,6 +673,217 @@ h2 {
   font-size: 13px;
 }
 
+.statistics-section {
+  margin-top: 42px;
+}
+
+.weekly-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.weekly-stat {
+  min-height: 72px;
+  padding: 10px;
+  border: 2px solid var(--line);
+  background: var(--panel-raised);
+}
+
+.weekly-stat-label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.weekly-stat-value {
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.chart-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.chart-toggles {
+  display: flex;
+  gap: 6px;
+}
+
+.weekly-chart {
+  min-height: 190px;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+  padding: 14px 12px 8px;
+  border: 2px solid var(--line);
+  background: var(--panel);
+}
+
+.chart-day {
+  min-width: 0;
+  height: 160px;
+  display: grid;
+  grid-template-rows: 18px minmax(0, 1fr) 20px;
+  gap: 5px;
+  text-align: center;
+}
+
+.chart-value {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.chart-bar-track {
+  height: 100%;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.chart-bar {
+  width: 100%;
+  min-height: 0;
+  background: var(--gold);
+  transition: height 250ms ease;
+}
+
+.chart-day.is-today .chart-bar {
+  background: var(--mint);
+}
+
+.chart-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.chart-day.is-today .chart-label {
+  color: var(--mint);
+}
+
+.chart-empty {
+  grid-column: 1 / -1;
+  align-self: center;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 700;
+}
+
+.confirm-dialog {
+  width: min(90vw, 430px);
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 6px 6px 0 var(--line);
+}
+
+.confirm-dialog::backdrop {
+  background: rgb(8 7 20 / 72%);
+}
+
+.confirm-card {
+  padding: 22px;
+}
+
+.confirm-title {
+  margin-bottom: 14px;
+  color: var(--gold);
+}
+
+.confirm-message {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-weight: 700;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.confirm-actions button,
+.timer-control {
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 2px solid var(--line);
+  border-radius: 2px;
+  background: var(--panel-raised);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.confirm-accept,
+.timer-stop {
+  border-color: var(--pink) !important;
+  color: var(--pink) !important;
+}
+
+.timer-panel {
+  position: fixed;
+  z-index: 4;
+  right: 16px;
+  bottom: 16px;
+  left: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 18px;
+  align-items: center;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border: 2px solid var(--gold);
+  background: var(--panel-raised);
+  box-shadow: 4px 4px 0 var(--line);
+}
+
+body.has-active-timer {
+  padding-bottom: 96px;
+}
+
+.timer-info {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.timer-quest {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timer-phase {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.timer-countdown {
+  color: var(--gold);
+  font: 18px var(--font-title);
+  white-space: nowrap;
+}
+
+.timer-actions {
+  display: flex;
+  gap: 7px;
+}
+
 .site-footer {
   padding: 37px 0 26px;
   text-align: center;
@@ -627,6 +906,11 @@ h2 {
 }
 
 .toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   max-width: min(90vw, 360px);
   padding: 12px 16px;
   border: 2px solid var(--gold);
@@ -635,6 +919,22 @@ h2 {
   color: var(--gold);
   font-weight: 800;
   animation: toast-in 180ms steps(3, end);
+}
+
+.toast-action {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.toast-action:focus-visible {
+  outline: 3px solid var(--mint);
+  outline-offset: 2px;
 }
 
 .toast.is-error {
@@ -681,6 +981,10 @@ h2 {
 
   .badge-list {
     grid-template-columns: repeat(3, 1fr);
+  }
+
+  .weekly-summary {
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
@@ -776,6 +1080,14 @@ h2 {
     grid-column: auto;
   }
 
+  .category-field {
+    grid-column: auto;
+  }
+
+  .deadline-field {
+    grid-column: 1;
+  }
+
   .quest-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -811,6 +1123,53 @@ h2 {
     grid-row: 2;
     margin-top: -3px;
     font-size: 8px;
+  }
+
+  .quest-meta {
+    gap: 4px;
+  }
+
+  .pomodoro-button {
+    min-width: 24px;
+  }
+
+  .weekly-chart {
+    min-height: 165px;
+    gap: 4px;
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .chart-day {
+    height: 138px;
+  }
+
+  .chart-label {
+    font-size: 9px;
+  }
+
+  .timer-panel {
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  body.has-active-timer {
+    padding-bottom: 132px;
+  }
+
+  .timer-countdown {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 14px;
+  }
+
+  .timer-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 
   .delete-button {

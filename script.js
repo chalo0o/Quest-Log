@@ -35,6 +35,14 @@ const auth = getAuth(app);
     medium: { label: "Sedang", xp: 25 },
     hard: { label: "Sulit", xp: 50 },
   };
+  const CATEGORIES = {
+    kuliah: { label: "Kuliah" },
+    kerja: { label: "Kerja" },
+    pribadi: { label: "Pribadi" },
+  };
+  const TIMER_STORAGE_KEY = "questlog-timer";
+  const FOCUS_DURATION = 25 * 60 * 1000;
+  const BREAK_DURATION = 5 * 60 * 1000;
   const RANKS = [
     { title: "Murid Baru", avatar: "🧙" },
     { title: "Petualang", avatar: "🧝" },
@@ -51,6 +59,7 @@ const auth = getAuth(app);
     { id: "hard", icon: "🐲", name: "Penakluk sulit", description: "3 quest Sulit selesai", earned: (state, stats) => stats.hardCompleted >= 3 },
     { id: "level-five", icon: "⭐", name: "Level 5", description: "Capai level 5", earned: (state, stats) => stats.level >= 5 },
     { id: "penalty-free", icon: "🛡️", name: "Tanpa telat 7 hari", description: "7 hari berturut-turut tanpa denda", earned: (state) => state.penaltyFreeStreak >= 7 },
+    { id: "pomo-ten", icon: "🍅", name: "10 sesi fokus", description: "Selesaikan 10 sesi Pomodoro", earned: (state) => state.quests.reduce((total, quest) => total + quest.pomodoros, 0) >= 10 },
   ];
 
   const elements = {
@@ -58,6 +67,7 @@ const auth = getAuth(app);
     name: document.querySelector("#quest-name"),
     difficulty: document.querySelector("#quest-difficulty"),
     deadline: document.querySelector("#quest-deadline"),
+    category: document.querySelector("#quest-category"),
     avatar: document.querySelector("#character-avatar"),
     rank: document.querySelector("#character-title"),
     level: document.querySelector("#character-level"),
@@ -74,6 +84,21 @@ const auth = getAuth(app);
     questList: document.querySelector("#quest-list"),
     toastRegion: document.querySelector("#toast-region"),
     filterTabs: document.querySelectorAll(".filter-tab"),
+    categoryFilters: document.querySelectorAll(".category-filter"),
+    chartToggles: document.querySelectorAll(".chart-toggle"),
+    weeklySummary: document.querySelector("#weekly-summary"),
+    weeklyChart: document.querySelector("#weekly-chart"),
+    confirmDialog: document.querySelector("#confirm-dialog"),
+    confirmTitle: document.querySelector("#confirm-title"),
+    confirmMessage: document.querySelector("#confirm-message"),
+    confirmCancel: document.querySelector("#confirm-cancel"),
+    confirmAccept: document.querySelector("#confirm-accept"),
+    timerPanel: document.querySelector("#timer-panel"),
+    timerQuest: document.querySelector("#timer-quest"),
+    timerPhase: document.querySelector("#timer-phase"),
+    timerCountdown: document.querySelector("#timer-countdown"),
+    timerPause: document.querySelector("#timer-pause"),
+    timerStop: document.querySelector("#timer-stop"),
     loginButton: document.querySelector("#login-button"),
     logoutButton: document.querySelector("#logout-button"),
     userInfo: document.querySelector("#user-info"),
@@ -82,6 +107,13 @@ const auth = getAuth(app);
   };
 
   let activeFilter = "active";
+  let activeCategory = "all";
+  let chartMode = "done";
+  let pendingDialogAction = null;
+  let dialogReturnFocus = null;
+  let pomodoroTimer = loadPomodoroTimer();
+  let timerTick = null;
+  let audioContext = null;
   let toastQueue = [];
   let toastShowing = false;
   let state = loadState();
@@ -107,6 +139,7 @@ const auth = getAuth(app);
       lastCheck: getYesterdayKey(),
       penaltyFreeStreak: 0,
       lastDeadlineBonus: null,
+      dailyLog: {},
       currentStreak: 0,
       bestStreak: 0,
       lastCompletedDate: null,
@@ -138,6 +171,8 @@ const auth = getAuth(app);
     return {
       quests: quests.map((quest) => ({
         ...quest,
+        cat: Object.hasOwn(CATEGORIES, quest.cat) ? quest.cat : "pribadi",
+        pomodoros: Number.isSafeInteger(quest.pomodoros) && quest.pomodoros >= 0 ? quest.pomodoros : 0,
         penaltyDay: isDateKey(quest.penaltyDay) ? quest.penaltyDay : null,
       })),
       totalXp: Math.max(0, totalXp),
@@ -146,6 +181,7 @@ const auth = getAuth(app);
       lastCheck: isDateKey(data.lastCheck) ? data.lastCheck : getYesterdayKey(),
       penaltyFreeStreak: Math.max(0, Number.isSafeInteger(data.penaltyFreeStreak) ? data.penaltyFreeStreak : 0),
       lastDeadlineBonus: isDateKey(data.lastDeadlineBonus) ? data.lastDeadlineBonus : null,
+      dailyLog: normalizeDailyLog(data.dailyLog),
       currentStreak: Math.max(0, Number.isFinite(data.currentStreak) ? data.currentStreak : Number.isFinite(data.streak) ? data.streak : 0),
       bestStreak: Math.max(0, Number.isFinite(data.bestStreak) ? data.bestStreak : Number.isFinite(data.best) ? data.best : 0),
       lastCompletedDate: typeof data.lastCompletedDate === "string"
@@ -153,6 +189,40 @@ const auth = getAuth(app);
         : typeof data.last === "string" ? data.last : null,
       nid: Math.max(1, Number.isSafeInteger(data.nid) ? data.nid : 1),
     };
+  }
+
+  function normalizeDailyLog(value) {
+    const result = {};
+    if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+    for (const [date, entry] of Object.entries(value)) {
+      if (!isDateKey(date) || !entry || typeof entry !== "object") continue;
+      result[date] = {
+        done: Math.max(0, Number.isSafeInteger(entry.done) ? entry.done : 0),
+        xp: Math.max(0, Number.isSafeInteger(entry.xp) ? entry.xp : 0),
+        pomo: Math.max(0, Number.isSafeInteger(entry.pomo) ? entry.pomo : 0),
+      };
+    }
+    return trimDailyLog(result);
+  }
+
+  function trimDailyLog(dailyLog) {
+    const oldest = addDaysToKey(getTodayKey(), -60);
+    for (const date of Object.keys(dailyLog)) {
+      if (date < oldest) delete dailyLog[date];
+    }
+    return dailyLog;
+  }
+
+  function mergeDailyLogs(cloudLog, localLog) {
+    const merged = {};
+    for (const date of new Set([...Object.keys(cloudLog), ...Object.keys(localLog)])) {
+      merged[date] = {
+        done: Math.max(cloudLog[date]?.done || 0, localLog[date]?.done || 0),
+        xp: Math.max(cloudLog[date]?.xp || 0, localLog[date]?.xp || 0),
+        pomo: Math.max(cloudLog[date]?.pomo || 0, localLog[date]?.pomo || 0),
+      };
+    }
+    return trimDailyLog(merged);
   }
 
   function isValidQuest(quest) {
@@ -176,6 +246,7 @@ const auth = getAuth(app);
       lastCheck: sourceState.lastCheck,
       penaltyFreeStreak: sourceState.penaltyFreeStreak,
       lastDeadlineBonus: sourceState.lastDeadlineBonus,
+      dailyLog: sourceState.dailyLog,
       done: completed.length,
       hard: completed.filter((quest) => quest.difficulty === "hard").length,
       streak: sourceState.currentStreak,
@@ -202,6 +273,7 @@ const auth = getAuth(app);
       sourceState.hp < 100 ||
       sourceState.penaltyFreeStreak > 0 ||
       sourceState.lastDeadlineBonus !== null ||
+      Object.keys(sourceState.dailyLog).length > 0 ||
       sourceState.currentStreak > 0 ||
       sourceState.bestStreak > 0 ||
       sourceState.lastCompletedDate !== null;
@@ -220,6 +292,8 @@ const auth = getAuth(app);
       if (existingIndex !== undefined) {
         const existingQuest = quests[existingIndex];
         existingQuest.completed ||= localQuest.completed;
+        existingQuest.pomodoros = Math.max(existingQuest.pomodoros, localQuest.pomodoros);
+        if (existingQuest.cat === "pribadi" && localQuest.cat !== "pribadi") existingQuest.cat = localQuest.cat;
         if (localQuest.completedAt && (!existingQuest.completedAt || localQuest.completedAt < existingQuest.completedAt)) {
           existingQuest.completedAt = localQuest.completedAt;
         }
@@ -266,6 +340,7 @@ const auth = getAuth(app);
       lastCheck,
       penaltyFreeStreak: Math.max(cloudState.penaltyFreeStreak, localState.penaltyFreeStreak),
       lastDeadlineBonus: [cloudState.lastDeadlineBonus, localState.lastDeadlineBonus].filter(Boolean).sort().at(-1) || null,
+      dailyLog: mergeDailyLogs(cloudState.dailyLog, localState.dailyLog),
       currentStreak,
       bestStreak: Math.max(cloudState.bestStreak, localState.bestStreak),
       lastCompletedDate: latestCompletion,
@@ -363,6 +438,62 @@ const auth = getAuth(app);
       hardCompleted: completed.filter((quest) => quest.difficulty === "hard").length,
       level: getLevelInfo(state.totalXp, state.levelFloor).level,
     };
+  }
+
+  function getWeeklyEntries() {
+    const today = getTodayKey();
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = addDaysToKey(today, index - 6);
+      return { date, ...(state.dailyLog[date] || { done: 0, xp: 0, pomo: 0 }) };
+    });
+  }
+
+  function renderStatistics() {
+    const days = getWeeklyEntries();
+    const totals = days.reduce((result, day) => ({
+      done: result.done + day.done,
+      xp: result.xp + day.xp,
+      pomo: result.pomo + day.pomo,
+    }), { done: 0, xp: 0, pomo: 0 });
+    const bestDay = days.reduce((best, day) => {
+      if (day.done !== best.done) return day.done > best.done ? day : best;
+      if (day.xp !== best.xp) return day.xp > best.xp ? day : best;
+      return day.pomo > best.pomo ? day : best;
+    }, days[0]);
+    const bestLabel = totals.done || totals.xp || totals.pomo
+      ? new Intl.DateTimeFormat("id-ID", { weekday: "short" }).format(new Date(`${bestDay.date}T12:00:00`))
+      : "—";
+    elements.weeklySummary.innerHTML = `
+      <div class="weekly-stat"><span class="weekly-stat-label">QUEST SELESAI</span><span class="weekly-stat-value">${totals.done}</span></div>
+      <div class="weekly-stat"><span class="weekly-stat-label">TOTAL XP</span><span class="weekly-stat-value">${totals.xp}</span></div>
+      <div class="weekly-stat"><span class="weekly-stat-label">SESI FOKUS</span><span class="weekly-stat-value">${totals.pomo}</span></div>
+      <div class="weekly-stat"><span class="weekly-stat-label">HARI TERBAIK</span><span class="weekly-stat-value">${bestLabel}</span></div>`;
+
+    const metric = chartMode === "done" ? "done" : "xp";
+    const maximum = Math.max(1, ...days.map((day) => day[metric]));
+    const hasActivity = totals.done > 0 || totals.xp > 0 || totals.pomo > 0;
+    const weekdayLabels = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
+    const chartDescription = days.map((day) => {
+      const label = weekdayLabels[new Date(`${day.date}T12:00:00`).getDay()];
+      return `${label} ${day[metric]}`;
+    }).join(", ");
+    const columns = days.map((day) => {
+      const value = day[metric];
+      const height = value ? Math.max(5, (value / maximum) * 100) : 0;
+      const today = day.date === getTodayKey();
+      const dayLabel = weekdayLabels[new Date(`${day.date}T12:00:00`).getDay()];
+      return `
+        <div class="chart-day${today ? " is-today" : ""}" aria-label="${dayLabel} ${day.date}: ${value} ${metric === "done" ? "quest selesai" : "XP"}${today ? ", hari ini" : ""}">
+          <span class="chart-value">${value}</span>
+          <div class="chart-bar-track" aria-hidden="true"><div class="chart-bar" style="height:${height}%"></div></div>
+          <span class="chart-label">${dayLabel}${today ? " •" : ""}</span>
+        </div>`;
+    }).join("");
+    elements.weeklyChart.setAttribute("role", "img");
+    elements.weeklyChart.setAttribute("aria-label", `Grafik ${chartMode === "done" ? "quest selesai" : "XP"} selama tujuh hari terakhir. ${chartDescription}`);
+    elements.weeklyChart.innerHTML = hasActivity
+      ? columns
+      : '<p class="chart-empty">Selesaikan quest pertamamu untuk mulai mengisi statistik!</p>';
   }
 
   function renderCharacter(previousLevel) {
@@ -476,7 +607,9 @@ const auth = getAuth(app);
   }
 
   function getVisibleQuests() {
-    let quests = state.quests;
+    let quests = activeCategory === "all"
+      ? state.quests
+      : state.quests.filter((quest) => quest.cat === activeCategory);
     if (activeFilter === "active") {
       quests = quests.filter((quest) => !quest.completed);
       quests = [...quests].sort((a, b) => {
@@ -515,11 +648,15 @@ const auth = getAuth(app);
 
     elements.questList.innerHTML = quests.map((quest) => {
       const difficulty = DIFFICULTIES[quest.difficulty];
+      const category = CATEGORIES[quest.cat];
       const overdue = isOverdue(quest);
       const deadlineStatus = getDeadlineStatus(quest);
       const metadata = [
         `<span class="difficulty-tag ${quest.difficulty}">${difficulty.label}</span>`,
+        `<span class="category-tag ${quest.cat}">${category.label}</span>`,
         deadlineStatus ? `<span class="deadline-tag${overdue ? " overdue-tag" : ""}">${overdue ? "" : "📅 "}${deadlineStatus}</span>` : "",
+        quest.pomodoros ? `<span class="pomodoro-count" aria-label="${quest.pomodoros} sesi fokus">🍅 ${quest.pomodoros}</span>` : "",
+        !quest.completed ? `<button class="pomodoro-button" type="button" data-action="pomodoro" data-id="${escapeHtml(quest.id)}" aria-label="Mulai sesi fokus 25 menit untuk ${escapeHtml(quest.name)}">🍅</button>` : "",
       ].filter(Boolean).join("");
       return `
         <article class="quest-card difficulty-${quest.difficulty}${quest.completed ? " is-completed" : ""}${overdue ? " is-overdue" : ""}">
@@ -551,10 +688,12 @@ const auth = getAuth(app);
     renderCharacter();
     renderBadges();
     renderQuests();
+    renderStatistics();
+    renderTimer();
   }
 
-  function queueToast(message, isError = false) {
-    toastQueue.push({ message, isError });
+  function queueToast(message, isError = false, action = null) {
+    toastQueue.push({ message, isError, action });
     showNextToast();
   }
 
@@ -564,13 +703,346 @@ const auth = getAuth(app);
     const item = toastQueue.shift();
     const toast = document.createElement("div");
     toast.className = `toast${item.isError ? " is-error" : ""}`;
-    toast.textContent = item.message;
+    const message = document.createElement("span");
+    message.textContent = item.message;
+    toast.append(message);
+    if (item.action) {
+      const actionButton = document.createElement("button");
+      actionButton.className = "toast-action";
+      actionButton.type = "button";
+      actionButton.textContent = item.action.label;
+      actionButton.setAttribute("aria-label", item.action.ariaLabel || item.action.label);
+      actionButton.addEventListener("click", () => {
+        window.clearTimeout(toastTimer);
+        toast.remove();
+        toastShowing = false;
+        item.action.run();
+        showNextToast();
+      }, { once: true });
+      toast.append(actionButton);
+    }
     elements.toastRegion.append(toast);
-    window.setTimeout(() => {
+    const toastTimer = window.setTimeout(() => {
       toast.remove();
       toastShowing = false;
       showNextToast();
-    }, 2300);
+    }, item.action ? 6000 : 2300);
+  }
+
+  function openConfirmDialog({ title, message, acceptLabel, onAccept, danger = true }) {
+    if (elements.confirmDialog.open) elements.confirmDialog.close();
+    dialogReturnFocus = document.activeElement;
+    pendingDialogAction = onAccept;
+    elements.confirmTitle.textContent = title;
+    elements.confirmMessage.textContent = message;
+    elements.confirmAccept.textContent = acceptLabel;
+    elements.confirmAccept.setAttribute("aria-label", acceptLabel);
+    elements.confirmAccept.classList.toggle("confirm-accept", danger);
+    elements.confirmDialog.showModal();
+    elements.confirmCancel.focus();
+  }
+
+  function closeConfirmDialog(accept = false) {
+    const action = pendingDialogAction;
+    pendingDialogAction = null;
+    if (elements.confirmDialog.open) elements.confirmDialog.close();
+    if (accept && action) action();
+  }
+
+  function restoreDialogFocus() {
+    if (dialogReturnFocus?.isConnected) dialogReturnFocus.focus();
+    else elements.name.focus();
+    dialogReturnFocus = null;
+  }
+
+  function loadPomodoroTimer() {
+    try {
+      const saved = localStorage.getItem(TIMER_STORAGE_KEY);
+      if (!saved) return null;
+      const timer = JSON.parse(saved);
+      if (
+        !timer ||
+        typeof timer.questId !== "string" ||
+        !["focus", "break"].includes(timer.phase) ||
+        (timer.paused ? !Number.isFinite(timer.remainingMs) : !Number.isFinite(timer.endAt))
+      ) {
+        localStorage.removeItem(TIMER_STORAGE_KEY);
+        return null;
+      }
+      return timer;
+    } catch (error) {
+      console.error("Gagal memuat timer Pomodoro:", error);
+      return null;
+    }
+  }
+
+  function savePomodoroTimer() {
+    try {
+      if (pomodoroTimer) localStorage.setItem(TIMER_STORAGE_KEY, JSON.stringify(pomodoroTimer));
+      else localStorage.removeItem(TIMER_STORAGE_KEY);
+    } catch (error) {
+      console.error("Gagal menyimpan timer Pomodoro:", error);
+      queueToast("Timer gagal disimpan di perangkat ini.", true);
+    }
+  }
+
+  function formatTimerDuration(milliseconds) {
+    const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+    const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  }
+
+  function renderTimer() {
+    if (!pomodoroTimer) {
+      elements.timerPanel.hidden = true;
+      document.body.classList.remove("has-active-timer");
+      document.title = "Quest Log — Petualangan Dimulai";
+      if (timerTick) window.clearInterval(timerTick);
+      timerTick = null;
+      return;
+    }
+    const quest = state.quests.find((item) => item.id === pomodoroTimer.questId);
+    if (!quest || quest.completed) {
+      pomodoroTimer = null;
+      savePomodoroTimer();
+      elements.timerPanel.hidden = true;
+      document.body.classList.remove("has-active-timer");
+      document.title = "Quest Log — Petualangan Dimulai";
+      return;
+    }
+
+    const remaining = pomodoroTimer.paused
+      ? pomodoroTimer.remainingMs
+      : pomodoroTimer.endAt - Date.now();
+    const countdown = formatTimerDuration(remaining);
+    elements.timerPanel.hidden = false;
+    document.body.classList.add("has-active-timer");
+    elements.timerQuest.textContent = quest.name;
+    elements.timerPhase.textContent = pomodoroTimer.phase === "focus" ? "Fokus" : "Istirahat";
+    elements.timerCountdown.textContent = countdown;
+    elements.timerPause.textContent = pomodoroTimer.paused ? "Lanjut" : "Jeda";
+    elements.timerPause.setAttribute("aria-label", pomodoroTimer.paused ? "Lanjutkan timer" : "Jeda timer");
+    document.title = `${countdown} — ${quest.name} | Quest Log`;
+  }
+
+  async function requestNotificationPermissionOnce() {
+    if (!("Notification" in window)) return;
+    try {
+      if (localStorage.getItem("questlog-notification-requested") === "true") return;
+      localStorage.setItem("questlog-notification-requested", "true");
+      if (Notification.permission === "default") await Notification.requestPermission();
+    } catch (error) {
+      console.error("Gagal meminta izin notifikasi:", error);
+    }
+  }
+
+  function unlockAudio() {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!audioContext) audioContext = new AudioContextClass();
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch((error) => console.error("Gagal mengaktifkan audio:", error));
+      }
+    } catch (error) {
+      console.error("Gagal menyiapkan audio sesi fokus:", error);
+    }
+  }
+
+  function startPomodoro(quest) {
+    unlockAudio();
+    void requestNotificationPermissionOnce().then(() => {
+      if (pomodoroTimer) {
+        if (pomodoroTimer.questId === quest.id) {
+          queueToast("Timer quest ini sudah berjalan.");
+          return;
+        }
+        openConfirmDialog({
+          title: "Ganti timer?",
+          message: "Timer lain sedang berjalan. Ganti dengan sesi fokus quest ini?",
+          acceptLabel: "Ganti timer",
+          danger: false,
+          onAccept: () => beginPomodoro(quest),
+        });
+        return;
+      }
+      beginPomodoro(quest);
+    });
+  }
+
+  function beginPomodoro(quest) {
+    unlockAudio();
+    if (!state.quests.some((item) => item.id === quest.id && !item.completed)) return;
+    pomodoroTimer = {
+      questId: quest.id,
+      phase: "focus",
+      endAt: Date.now() + FOCUS_DURATION,
+      paused: false,
+    };
+    savePomodoroTimer();
+    renderTimer();
+    startTimerTick();
+  }
+
+  function startTimerTick() {
+    if (timerTick) window.clearInterval(timerTick);
+    timerTick = window.setInterval(updatePomodoroTimer, 1000);
+  }
+
+  function playFocusBeep() {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+      if (!audioContext) audioContext = new AudioContextClass();
+      const context = audioContext;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = 880;
+      gain.gain.value = 0.08;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.18);
+    } catch (error) {
+      console.error("Gagal membunyikan notifikasi fokus:", error);
+    }
+  }
+
+  function addExperience(amount) {
+    const previousLevel = getLevelInfo(state.totalXp, state.levelFloor).level;
+    state.totalXp += amount;
+    state.levelFloor = Math.max(state.levelFloor, getLevelInfo(state.totalXp).level);
+    return {
+      previousLevel,
+      newLevel: getLevelInfo(state.totalXp, state.levelFloor).level,
+    };
+  }
+
+  function recordDailyActivity(date, amounts) {
+    const entry = state.dailyLog[date] || { done: 0, xp: 0, pomo: 0 };
+    state.dailyLog[date] = {
+      done: entry.done + (amounts.done || 0),
+      xp: entry.xp + (amounts.xp || 0),
+      pomo: entry.pomo + (amounts.pomo || 0),
+    };
+    trimDailyLog(state.dailyLog);
+  }
+
+  function completeFocusSession() {
+    const quest = state.quests.find((item) => item.id === pomodoroTimer?.questId);
+    if (!quest || quest.completed) return;
+    const today = getTodayKey();
+    const todayPomos = state.dailyLog[today]?.pomo || 0;
+    quest.pomodoros += 1;
+    const reward = todayPomos < 8 ? 10 : 0;
+    const levelChange = reward ? addExperience(reward) : null;
+    recordDailyActivity(today, { pomo: 1, xp: reward });
+    persistState();
+    render();
+    playFocusBeep();
+    if (reward) {
+      queueToast("Sesi fokus selesai! +10 XP");
+      if (levelChange.newLevel > levelChange.previousLevel) queueToast("LEVEL UP!");
+    } else {
+      queueToast("Sesi fokus selesai! Batas 8 bonus XP hari ini tercapai.");
+    }
+    if ("Notification" in window && Notification.permission === "granted") {
+      try {
+        new Notification("Quest Log", { body: "Sesi fokus selesai!" });
+      } catch (error) {
+        console.error("Gagal mengirim notifikasi sesi fokus:", error);
+      }
+    }
+  }
+
+  function finishBreak() {
+    pomodoroTimer = null;
+    savePomodoroTimer();
+    renderTimer();
+    if (timerTick) window.clearInterval(timerTick);
+    timerTick = null;
+    queueToast("Istirahat selesai. Siap fokus lagi?");
+  }
+
+  function updatePomodoroTimer() {
+    if (!pomodoroTimer || pomodoroTimer.paused || Date.now() < pomodoroTimer.endAt) {
+      renderTimer();
+      return;
+    }
+    if (pomodoroTimer.phase === "focus") {
+      const focusEnd = pomodoroTimer.endAt;
+      completeFocusSession();
+      pomodoroTimer = {
+        questId: pomodoroTimer.questId,
+        phase: "break",
+        endAt: focusEnd + BREAK_DURATION,
+        paused: false,
+      };
+      savePomodoroTimer();
+      queueToast("Istirahat 5 menit dimulai.");
+      if (Date.now() >= pomodoroTimer.endAt) finishBreak();
+      else renderTimer();
+      return;
+    }
+    finishBreak();
+  }
+
+  function pauseOrResumeTimer() {
+    if (!pomodoroTimer) return;
+    if (pomodoroTimer.paused) {
+      pomodoroTimer.endAt = Date.now() + pomodoroTimer.remainingMs;
+      delete pomodoroTimer.remainingMs;
+      pomodoroTimer.paused = false;
+      startTimerTick();
+    } else {
+      pomodoroTimer.remainingMs = Math.max(0, pomodoroTimer.endAt - Date.now());
+      pomodoroTimer.paused = true;
+      delete pomodoroTimer.endAt;
+    }
+    savePomodoroTimer();
+    renderTimer();
+  }
+
+  function stopPomodoro() {
+    pomodoroTimer = null;
+    savePomodoroTimer();
+    renderTimer();
+    if (timerTick) window.clearInterval(timerTick);
+    timerTick = null;
+    queueToast("Timer dihentikan.");
+  }
+
+  function confirmDeleteQuest(quest) {
+    const index = state.quests.findIndex((item) => item.id === quest.id);
+    if (index < 0) return;
+    openConfirmDialog({
+      title: "Hapus quest",
+      message: `Hapus quest "${quest.name}"? Catatan: XP yang sudah didapat tidak berkurang.`,
+      acceptLabel: "Hapus",
+      danger: true,
+      onAccept: () => {
+        state.quests.splice(index, 1);
+        if (pomodoroTimer?.questId === quest.id) {
+          pomodoroTimer = null;
+          savePomodoroTimer();
+          if (timerTick) window.clearInterval(timerTick);
+          timerTick = null;
+        }
+        persistState();
+        render();
+        queueToast("Quest dihapus", false, {
+          label: "Urungkan",
+          ariaLabel: `Urungkan penghapusan quest ${quest.name}`,
+          run: () => {
+            if (state.quests.some((item) => item.id === quest.id)) return;
+            state.quests.splice(Math.min(index, state.quests.length), 0, quest);
+            persistState();
+            render();
+          },
+        });
+      },
+    });
   }
 
   function setSyncStatus(message, isError = false) {
@@ -878,11 +1350,13 @@ const auth = getAuth(app);
       id: String(state.nid++),
       name: name.slice(0, 100),
       difficulty: elements.difficulty.value,
+      cat: elements.category.value,
       deadline: elements.deadline.value || null,
       completed: false,
       createdAt: Date.now(),
       completedAt: null,
       penaltyDay: null,
+      pomodoros: 0,
     });
     persistState();
     elements.form.reset();
@@ -903,6 +1377,55 @@ const auth = getAuth(app);
     });
   });
 
+  elements.categoryFilters.forEach((button) => {
+    button.addEventListener("click", () => {
+      activeCategory = button.dataset.categoryFilter;
+      elements.categoryFilters.forEach((item) => {
+        const selected = item === button;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      renderQuests();
+    });
+  });
+
+  elements.chartToggles.forEach((button) => {
+    button.addEventListener("click", () => {
+      chartMode = button.dataset.chartMode;
+      elements.chartToggles.forEach((item) => {
+        const selected = item === button;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      renderStatistics();
+    });
+  });
+
+  elements.confirmCancel.addEventListener("click", () => closeConfirmDialog(false));
+  elements.confirmAccept.addEventListener("click", () => closeConfirmDialog(true));
+  elements.confirmDialog.addEventListener("click", (event) => {
+    if (event.target === elements.confirmDialog) closeConfirmDialog(false);
+  });
+  elements.confirmDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeConfirmDialog(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || !elements.confirmDialog.open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeConfirmDialog(false);
+  });
+  elements.confirmDialog.addEventListener("close", () => {
+    pendingDialogAction = null;
+    restoreDialogFocus();
+  });
+  elements.timerPause.addEventListener("click", pauseOrResumeTimer);
+  elements.timerStop.addEventListener("click", stopPomodoro);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) updatePomodoroTimer();
+  });
+
   elements.questList.addEventListener("click", (event) => {
     const button = event.target.closest("button[data-action]");
     if (!button) return;
@@ -914,27 +1437,34 @@ const auth = getAuth(app);
     if (!quest) return;
 
     if (button.dataset.action === "delete") {
-      state.quests = state.quests.filter((item) => item.id !== quest.id);
-      persistState();
-      render();
+      confirmDeleteQuest(quest);
+      return;
+    }
+    if (button.dataset.action === "pomodoro") {
+      startPomodoro(quest);
       return;
     }
     if (button.dataset.action !== "complete" || quest.completed) return;
 
-    const previousLevel = getLevelInfo(state.totalXp, state.levelFloor).level;
     const today = getTodayKey();
     const baseXp = DIFFICULTIES[quest.difficulty].xp;
     const xpMultiplier = quest.deadline && today < quest.deadline ? 1.2 : quest.deadline && today > quest.deadline ? 0.5 : 1;
     const xpEarned = Math.round(baseXp * xpMultiplier);
     const hpBeforeRecovery = state.hp;
 
-    // XP disimpan sebagai total agar sisa XP tetap terbawa saat naik level.
-    state.totalXp += xpEarned;
-    state.levelFloor = Math.max(state.levelFloor, getLevelInfo(state.totalXp).level);
+    // Semua sumber XP memakai satu jalur agar perubahan level konsisten.
+    const levelChange = addExperience(xpEarned);
     state.hp = Math.min(100, state.hp + 10);
     quest.completed = true;
     quest.completedAt = Date.now();
     const hpRecovered = state.hp - hpBeforeRecovery;
+    recordDailyActivity(today, { done: 1, xp: xpEarned });
+    if (pomodoroTimer?.questId === quest.id) {
+      pomodoroTimer = null;
+      savePomodoroTimer();
+      if (timerTick) window.clearInterval(timerTick);
+      timerTick = null;
+    }
 
     // Streak bertambah untuk hari berurutan; menyelesaikan beberapa quest di hari yang sama tidak menambahnya.
     if (state.lastCompletedDate !== today) {
@@ -944,7 +1474,6 @@ const auth = getAuth(app);
     }
 
     const bonusAwarded = awardDailyDeadlineBonus(state, today);
-    const newLevel = getLevelInfo(state.totalXp, state.levelFloor).level;
     persistState();
     render();
     const xpNote = xpMultiplier > 1
@@ -954,7 +1483,7 @@ const auth = getAuth(app);
         : "";
     queueToast(`+${xpEarned} XP${xpNote}${hpRecovered ? `, +${hpRecovered} HP` : ""}`);
     if (bonusAwarded) queueToast("+5 HP bonus harian");
-    if (newLevel > previousLevel) queueToast("LEVEL UP!");
+    if (levelChange.newLevel > levelChange.previousLevel) queueToast("LEVEL UP!");
   });
 
   window.setInterval(() => {
@@ -966,4 +1495,9 @@ const auth = getAuth(app);
   }, 30000);
 
   render();
+  renderTimer();
+  if (pomodoroTimer) {
+    startTimerTick();
+    updatePomodoroTimer();
+  }
 })();
