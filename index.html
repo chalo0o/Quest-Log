@@ -28,7 +28,7 @@
       </header>
 
       <div class="login-prompt" id="login-prompt">
-        Masuk dengan Google untuk menyimpan dan menyinkronkan quest di semua perangkat.
+        Mode lokal: login untuk sinkron antar perangkat
       </div>
 
       <section class="character-panel pixel-panel" aria-labelledby="character-title">
@@ -40,23 +40,43 @@
           </div>
         </div>
 
-        <div class="xp-section">
-          <div class="level-row">
-            <span class="level-label">LEVEL</span>
-            <strong class="level-number" id="character-level">1</strong>
-            <span class="xp-number" id="xp-text">0 / 100 XP</span>
+        <div class="character-progress">
+          <div class="xp-section">
+            <div class="level-row">
+              <span class="level-label">LEVEL</span>
+              <strong class="level-number" id="character-level">1</strong>
+              <span class="xp-number" id="xp-text">0 / 100 XP</span>
+            </div>
+            <div
+              class="xp-track"
+              id="xp-progress"
+              role="progressbar"
+              aria-label="Kemajuan XP menuju level berikutnya"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              aria-valuetext="0 dari 100 XP"
+            >
+              <div class="xp-fill" id="xp-fill"></div>
+            </div>
           </div>
-          <div
-            class="xp-track"
-            id="xp-progress"
-            role="progressbar"
-            aria-label="Kemajuan XP menuju level berikutnya"
-            aria-valuemin="0"
-            aria-valuemax="100"
-            aria-valuenow="0"
-            aria-valuetext="0 dari 100 XP"
-          >
-            <div class="xp-fill" id="xp-fill"></div>
+          <div class="hp-section">
+            <div class="hp-row">
+              <span class="level-label">HP</span>
+              <span class="hp-number" id="hp-text">100 / 100</span>
+            </div>
+            <div
+              class="hp-track"
+              id="hp-progress"
+              role="progressbar"
+              aria-label="HP karakter"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="100"
+              aria-valuetext="100 dari 100 HP"
+            >
+              <div class="hp-fill" id="hp-fill"></div>
+            </div>
           </div>
         </div>
 
@@ -94,7 +114,7 @@
           <span class="quest-count" id="quest-count">0 QUEST</span>
         </div>
 
-        <form class="quest-form pixel-panel" id="quest-form" hidden>
+        <form class="quest-form pixel-panel" id="quest-form">
           <label class="field quest-name-field">
             <span>NAMA QUEST</span>
             <input

@@ -133,6 +133,13 @@ a:focus-visible {
   min-width: 0;
 }
 
+.character-progress {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  min-width: 0;
+}
+
 .avatar {
   width: 68px;
   height: 68px;
@@ -207,6 +214,37 @@ h1 {
   width: 0;
   height: 100%;
   background-color: var(--gold);
+  background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(0 0 0 / 12%) 6px 8px);
+  transition: width 500ms ease;
+}
+
+.hp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 24px;
+  margin-bottom: 12px;
+}
+
+.hp-number {
+  color: var(--pink);
+  font: 8px var(--font-title);
+  white-space: nowrap;
+}
+
+.hp-track {
+  height: 20px;
+  overflow: hidden;
+  border: 2px solid var(--line);
+  background-color: var(--bg);
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 7px);
+}
+
+.hp-fill {
+  width: 100%;
+  height: 100%;
+  background-color: var(--pink);
   background-image: repeating-linear-gradient(135deg, transparent 0 6px, rgb(0 0 0 / 12%) 6px 8px);
   transition: width 500ms ease;
 }
@@ -685,7 +723,19 @@ h2 {
   }
 
   .xp-number {
-    font-size: 7px;
+    font-size: 6px;
+  }
+
+  .level-row {
+    gap: 5px;
+  }
+
+  .level-number {
+    font-size: 14px;
+  }
+
+  .character-progress {
+    gap: 10px;
   }
 
   .character-stats {
@@ -844,13 +894,10 @@ h2 {
 }
 
 .login-prompt {
-  margin-top: 18px;
-  padding: 12px 15px;
-  border: 2px dashed var(--line);
-  background: var(--panel);
+  margin-top: 8px;
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   text-align: center;
 }
 
