@@ -433,30 +433,9 @@ h2 {
   margin: 0 0 13px;
 }
 
+.filter-tab,
 .category-filter,
 .chart-toggle {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--panel);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.category-filter.is-active,
-.chart-toggle.is-active {
-  border-color: var(--gold);
-  color: var(--gold);
-}
-
-.filter-tabs {
-  display: flex;
-  gap: 5px;
-}
-
-.filter-tab {
   padding: 9px 13px;
   border: 2px solid transparent;
   border-radius: 2px;
@@ -466,14 +445,23 @@ h2 {
   font-weight: 800;
 }
 
-.filter-tab:hover {
+.filter-tab:hover,
+.category-filter:hover,
+.chart-toggle:hover {
   color: var(--text);
 }
 
-.filter-tab.is-active {
+.filter-tab.is-active,
+.category-filter.is-active,
+.chart-toggle.is-active {
   border-color: var(--line);
   background: var(--panel-raised);
   color: var(--gold);
+}
+
+.filter-tabs {
+  display: flex;
+  gap: 5px;
 }
 
 .sort-note {
@@ -595,18 +583,18 @@ h2 {
 }
 
 .category-tag.kuliah {
-  border-color: var(--blue);
-  color: var(--blue);
+  border-color: #5aa9ff;
+  color: #5aa9ff;
 }
 
 .category-tag.kerja {
-  border-color: var(--orange);
-  color: var(--orange);
+  border-color: #ff9f5a;
+  color: #ff9f5a;
 }
 
 .category-tag.pribadi {
-  border-color: var(--purple);
-  color: var(--purple);
+  border-color: #b58cff;
+  color: #b58cff;
 }
 
 .pomodoro-count {
@@ -674,7 +662,7 @@ h2 {
 }
 
 .statistics-section {
-  margin-top: 42px;
+  margin-top: 56px;
 }
 
 .weekly-summary {
